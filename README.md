@@ -1,7 +1,3 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # zero-ai-react（前端）
 
 一个用于连接 Python 后端的管理控制台，包含仪表盘、AI 对话、模型密钥管理、开发者 API 令牌等功能。
