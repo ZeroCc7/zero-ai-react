@@ -21,16 +21,37 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
     setLoading(true);
     setMessage(null);
     try {
-        await api.updateMe({
-            full_name: fullName,
-            email: email,
-            ...(password ? { password } : {})
-        });
+        const emailTrim = email.trim();
+        const fullNameTrim = fullName.trim();
+        const payload: any = { email: emailTrim };
+        if (fullNameTrim) payload.full_name = fullNameTrim;
+        if (password) payload.password = password;
+        // 简单前端校验
+        const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim);
+        if (!emailOk) {
+          throw new Error(JSON.stringify({ detail: '邮箱格式不正确' }));
+        }
+        if (password && password.length < 6) {
+          throw new Error(JSON.stringify({ detail: '密码长度至少为 6 位' }));
+        }
+        await api.updateMe(payload);
         setMessage({ type: 'success', text: '资料更新成功' });
         setPassword('');
         onUpdate();
     } catch (err: any) {
-        setMessage({ type: 'error', text: '资料更新失败' });
+        let text = '资料更新失败';
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed?.detail) {
+            if (Array.isArray(parsed.detail)) {
+              text = parsed.detail.map((d: any) => d.msg || JSON.stringify(d)).join('；');
+            } else {
+              text = parsed.detail;
+            }
+          }
+        } catch {
+        }
+        setMessage({ type: 'error', text });
     } finally {
         setLoading(false);
     }

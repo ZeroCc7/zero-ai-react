@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Check, X, Shield, RefreshCw } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../components/Toast';
 import { LLMKey } from '../types';
 
 export const Tokens: React.FC = () => {
@@ -14,6 +15,7 @@ export const Tokens: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { push } = useToast();
 
   useEffect(() => {
     loadKeys();
@@ -40,7 +42,7 @@ export const Tokens: React.FC = () => {
         resetForm();
         loadKeys();
     } catch (e) {
-        alert("添加密钥失败");
+        push({ type: 'error', text: '添加密钥失败' });
         console.error(e);
     } finally {
         setSubmitting(false);
@@ -52,10 +54,10 @@ export const Tokens: React.FC = () => {
           await api.validateKey(id);
           // Refresh list to show new validation status
           loadKeys();
-          alert("已触发验证检查。");
+          push({ type: 'success', text: '已触发验证检查' });
       } catch (e) {
           console.error(e);
-          alert("验证触发失败");
+          push({ type: 'error', text: '验证触发失败' });
       }
   };
 

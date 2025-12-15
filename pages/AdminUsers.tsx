@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle, XCircle, Search } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../components/Toast';
 import { User } from '../types';
 
 export const AdminUsers: React.FC = () => {
@@ -17,6 +18,7 @@ export const AdminUsers: React.FC = () => {
   const [isActive, setIsActive] = useState(true);
   const [isSuperuser, setIsSuperuser] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const { push } = useToast();
 
   useEffect(() => {
     loadUsers();
@@ -82,7 +84,7 @@ export const AdminUsers: React.FC = () => {
       setIsModalOpen(false);
       loadUsers();
     } catch (err) {
-      alert('操作失败');
+      push({ type: 'error', text: '操作失败' });
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -95,7 +97,7 @@ export const AdminUsers: React.FC = () => {
       await api.deleteUser(id);
       loadUsers();
     } catch (e) {
-      alert('删除用户失败');
+      push({ type: 'error', text: '删除用户失败' });
     }
   };
 

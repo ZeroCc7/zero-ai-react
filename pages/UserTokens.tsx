@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Copy, Terminal, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../components/Toast';
 import { UserApiToken } from '../types';
 
 export const UserTokens: React.FC = () => {
@@ -9,6 +10,7 @@ export const UserTokens: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const { push } = useToast();
 
   useEffect(() => {
     loadTokens();
@@ -37,7 +39,7 @@ export const UserTokens: React.FC = () => {
       setName('');
       loadTokens();
     } catch (e) {
-      alert('创建令牌失败');
+      push({ type: 'error', text: '创建令牌失败' });
     }
   };
 
@@ -47,7 +49,7 @@ export const UserTokens: React.FC = () => {
       await api.deleteUserToken(id);
       loadTokens();
     } catch (e) {
-      alert('删除令牌失败');
+      push({ type: 'error', text: '删除令牌失败' });
     }
   };
 

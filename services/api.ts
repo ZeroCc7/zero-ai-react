@@ -194,6 +194,7 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let lastPayload = '';
 
     try {
       while (true) {
@@ -202,16 +203,20 @@ export const api = {
         buffer += decoder.decode(value, { stream: true });
 
         let eventSep = buffer.indexOf('\n\n');
+        let altSep = buffer.indexOf('\r\n\r\n');
+        if (eventSep === -1 && altSep !== -1) eventSep = altSep;
         while (eventSep !== -1) {
           const rawEvent = buffer.slice(0, eventSep);
-          buffer = buffer.slice(eventSep + 2);
+          buffer = buffer.slice(eventSep + (eventSep === altSep ? 4 : 2));
 
           const lines = rawEvent.split(/\r?\n/);
           for (const ln of lines) {
             if (!ln.startsWith('data:')) continue;
-            const payload = ln.slice(5).trimStart();
-            if (!payload) continue;
+            const payload = ln.slice(5);
+            if (payload.length === 0) continue;
             if (payload === '[DONE]') return;
+            if (payload === lastPayload) continue;
+            lastPayload = payload;
             try {
               yield JSON.parse(payload);
             } catch {
@@ -220,6 +225,8 @@ export const api = {
           }
 
           eventSep = buffer.indexOf('\n\n');
+          altSep = buffer.indexOf('\r\n\r\n');
+          if (eventSep === -1 && altSep !== -1) eventSep = altSep;
         }
       }
 
@@ -228,9 +235,11 @@ export const api = {
         const lines = tail.split(/\r?\n/);
         for (const ln of lines) {
           if (!ln.startsWith('data:')) continue;
-          const payload = ln.slice(5).trimStart();
-          if (!payload) continue;
+          const payload = ln.slice(5);
+          if (payload.length === 0) continue;
           if (payload === '[DONE]') return;
+          if (payload === lastPayload) continue;
+          lastPayload = payload;
           try {
             yield JSON.parse(payload);
           } catch {

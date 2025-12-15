@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Send, Plus, MessageSquare, Bot, User, RefreshCw } from 'lucide-react';
+import { Send, Plus, MessageSquare, Bot, User, RefreshCw, Trash } from 'lucide-react';
 import { api } from '../services/api';
+import { useToast } from '../components/Toast';
 import { Conversation, Message } from '../types';
 
 export const Chat: React.FC = () => {
@@ -16,6 +17,11 @@ export const Chat: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastChunkRef = useRef<string>('');
   const accumRef = useRef<string>('');
+  const [convLoading, setConvLoading] = useState(false);
+  const [deletingConvId, setDeletingConvId] = useState<number | null>(null);
+  const [selectingConvId, setSelectingConvId] = useState<number | null>(null);
+  const { push } = useToast();
+  const [hasKeys, setHasKeys] = useState<boolean>(true);
 
   useEffect(() => {
     loadConversations();
@@ -40,6 +46,7 @@ export const Chat: React.FC = () => {
 
   const loadConversations = async () => {
     try {
+      setConvLoading(true);
       const data = await api.getConversations();
       setConversations(data);
       if (data.length > 0 && !activeConversationId) {
@@ -47,6 +54,8 @@ export const Chat: React.FC = () => {
       }
     } catch (e) {
       console.error("Failed to load conversations", e);
+    } finally {
+      setConvLoading(false);
     }
   };
 
@@ -55,10 +64,10 @@ export const Chat: React.FC = () => {
       const keys = await api.getMyKeys();
       const names = Array.from(new Set(keys.filter(k => k.is_active).map(k => k.model_name)));
       setModels(names);
-      if (names.length > 0) {
-        setSelectedModel(names[0]);
-      }
+      setHasKeys(names.length > 0);
+      if (names.length > 0) setSelectedModel(names[0]);
     } catch (e) {
+      setHasKeys(false);
     }
   };
 
@@ -71,6 +80,7 @@ export const Chat: React.FC = () => {
       console.error(e);
     } finally {
       setLoading(false);
+      setSelectingConvId(prev => (prev === id ? null : prev));
     }
   };
 
@@ -87,7 +97,7 @@ export const Chat: React.FC = () => {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !activeConversationId) return;
+    if (!inputText.trim() || !activeConversationId || !hasKeys) return;
 
     const userMsgText = inputText;
     setInputText('');
@@ -127,7 +137,6 @@ export const Chat: React.FC = () => {
             } else if ((chunk as any).delta?.content) {
                 text = (chunk as any).delta.content;
             }
-            if (!text) continue;
 
             let delta = '';
             const prev = accumRef.current;
@@ -135,16 +144,19 @@ export const Chat: React.FC = () => {
                 delta = text.slice(prev.length);
                 accumRef.current = text;
             } else {
+                if (text === lastChunkRef.current) {
+                    continue;
+                }
                 delta = text;
                 accumRef.current = prev + delta;
             }
+            lastChunkRef.current = text;
             if (!delta) continue;
-
             setMessages(prevMsgs => {
                 const newArr = [...prevMsgs];
                 const last = newArr[newArr.length - 1];
                 if (last && last.role === 'assistant') {
-                    last.content += delta;
+                    newArr[newArr.length - 1] = { ...last, content: last.content + delta };
                 }
                 return newArr;
             });
@@ -180,42 +192,68 @@ export const Chat: React.FC = () => {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {conversations.map(conv => (
-            <div
-              key={conv.id}
-              className={`w-full px-3 py-2.5 rounded-lg text-sm truncate transition-colors flex items-center gap-2 justify-between ${
-                activeConversationId === conv.id 
-                  ? 'bg-white shadow-sm text-indigo-600 font-medium' 
-                  : 'text-slate-600 hover:bg-slate-200/50'
-              }`}
-            >
-              <button className="flex items-center gap-2 flex-1 text-left" onClick={() => setActiveConversationId(conv.id)}>
-                <MessageSquare size={16} className={activeConversationId === conv.id ? 'text-indigo-500' : 'text-slate-400'} />
-                <span className="truncate">{conv.title}</span>
-              </button>
-              <button
-                className="p-2 text-slate-400 hover:text-red-600"
-                disabled={streaming}
-                onClick={async () => {
-                  if (!window.confirm('确认删除该会话？')) return;
-                  try {
-                    if (activeConversationId === conv.id) {
-                      setActiveConversationId(null);
-                      setMessages([]);
-                    }
-                    await api.deleteConversation(conv.id);
-                    const next = conversations.filter(c => c.id !== conv.id);
-                    setConversations(next);
-                  } catch (err) {
-                    alert('删除会话失败');
-                  }
-                }}
-                title="删除会话"
-              >
-                🗑️
-              </button>
+          {convLoading ? (
+            <div className="flex justify-center py-6">
+              <RefreshCw className="animate-spin text-slate-400" />
             </div>
-          ))}
+          ) : (
+            conversations.map(conv => {
+              const busy = deletingConvId === conv.id || selectingConvId === conv.id;
+              const isActive = activeConversationId === conv.id;
+              return (
+                <div
+                  key={conv.id}
+                  className={`w-full px-3 py-2.5 rounded-lg text-sm truncate transition-colors flex items-center gap-2 justify-between ${
+                    isActive 
+                      ? 'bg-white shadow-sm text-indigo-600 font-medium' 
+                      : 'text-slate-600 hover:bg-slate-200/50'
+                  } ${busy ? 'opacity-60 pointer-events-none' : ''}`}
+                >
+                  <button
+                    className="flex items-center gap-2 flex-1 text-left"
+                    onClick={() => {
+                      setSelectingConvId(conv.id);
+                      setActiveConversationId(conv.id);
+                    }}
+                  >
+                    <MessageSquare size={16} className={isActive ? 'text-indigo-500' : 'text-slate-400'} />
+                    <span className="truncate">{conv.title}</span>
+                    {selectingConvId === conv.id && (
+                      <RefreshCw size={14} className="animate-spin text-slate-400 ml-2" />
+                    )}
+                  </button>
+                  <button
+                    className="p-2 text-slate-400 hover:text-red-600"
+                    disabled={streaming || busy}
+                    onClick={async () => {
+                      if (!window.confirm('确认删除该会话？')) return;
+                      try {
+                        setDeletingConvId(conv.id);
+                        if (activeConversationId === conv.id) {
+                          setActiveConversationId(null);
+                          setMessages([]);
+                        }
+                        await api.deleteConversation(conv.id);
+                        const next = conversations.filter(c => c.id !== conv.id);
+                        setConversations(next);
+                      } catch (err) {
+                        push({ type: 'error', text: '删除会话失败' });
+                      } finally {
+                        setDeletingConvId(null);
+                      }
+                    }}
+                    title="删除会话"
+                  >
+                    {deletingConvId === conv.id ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Trash size={16} />
+                    )}
+                  </button>
+                </div>
+              );
+            })
+          )}
           {conversations.length === 0 && (
               <div className="text-center text-slate-400 text-sm mt-10">暂无历史</div>
           )}
@@ -228,6 +266,11 @@ export const Chat: React.FC = () => {
           <>
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {!hasKeys && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">
+                  未检测到可用模型密钥，请先在“LLM供应商密钥”页面添加后再开始对话。
+                </div>
+              )}
               {loading && messages.length === 0 ? (
                   <div className="flex justify-center mt-10"><RefreshCw className="animate-spin text-slate-400"/></div>
               ) : (
@@ -263,10 +306,10 @@ export const Chat: React.FC = () => {
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
                   className="px-3 py-3 bg-white border border-slate-300 rounded-xl text-sm"
-                  disabled={streaming}
+                  disabled={streaming || !hasKeys}
                 >
                   {models.length === 0 ? (
-                    <option value="gpt-3.5-turbo">默认: gpt-3.5-turbo</option>
+                    <option value="">请先添加密钥</option>
                   ) : (
                     models.map((m) => (
                       <option key={m} value={m}>{m}</option>
@@ -279,11 +322,11 @@ export const Chat: React.FC = () => {
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="输入消息..."
                   className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
-                  disabled={streaming}
+                  disabled={streaming || !hasKeys}
                 />
                 <button 
                   type="submit" 
-                  disabled={!inputText.trim() || streaming}
+                  disabled={!inputText.trim() || streaming || !hasKeys}
                   className="px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <Send size={20} />
