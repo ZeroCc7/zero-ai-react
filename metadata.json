@@ -1,0 +1,5 @@
+{
+  "name": "NexusAdmin - Python Backend Dashboard",
+  "description": "A comprehensive React frontend dashboard designed to interface with a Python/PostgreSQL backend. Features user authentication, profile management, and a robust API Token management system with AI-powered code generation helpers.",
+  "requestFramePermissions": []
+}
